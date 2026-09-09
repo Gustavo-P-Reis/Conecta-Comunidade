@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { loginSchema, type LoginSchema } from "@/lib/validations";
 import { SITE_NAME } from "@/lib/constants";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -93,5 +93,22 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// useSearchParams() exige um limite de Suspense (Next.js) — o componente em
+// si (LoginForm) não foi alterado, só passou a ser renderizado dentro do
+// Suspense abaixo.
+export default function LoginPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="container-app flex min-h-[80vh] items-center justify-center py-16">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </React.Suspense>
   );
 }
