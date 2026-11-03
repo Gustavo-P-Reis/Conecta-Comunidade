@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart } from "@/components/shared/bar-chart";
+import { RegionChart } from "@/components/shared/region-chart";
 import { getCategoryMeta } from "@/lib/constants";
+import { summarizeActiveEventsByRegion } from "@/lib/geography";
 import { formatEventDateLong } from "@/lib/utils";
 
 export const metadata = { title: "Administração" };
@@ -52,18 +54,25 @@ export default async function AdminPage() {
 
   const [
     { count: totalUsers },
-    { data: allEvents },
+    { data: allEvents, error: eventsError },
     { count: pendingReports },
   ] = await Promise.all([
     supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase
       .from("events")
-      .select("id, title, category, is_free, interest_count, status, created_at")
+      .select("id, title, category, is_free, interest_count, status, created_at, city, region")
       .order("created_at", { ascending: false }),
     supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
 
+  // Se a consulta falhar (ex.: migração de cidade/região ainda não aplicada), mostra a tela de
+  // erro em vez de exibir números zerados que pareceriam reais.
+  if (eventsError) {
+    throw new Error("Não foi possível carregar os eventos do painel.");
+  }
+
   const events = allEvents ?? [];
+  const regionSummary = summarizeActiveEventsByRegion(events);
   const totalInterested = events.reduce((sum, e) => sum + (e.interest_count ?? 0), 0);
 
   const categoryData = Object.entries(
@@ -116,6 +125,10 @@ export default async function AdminPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      <div className="mb-10">
+        <RegionChart summary={regionSummary} />
       </div>
 
       <div className="mb-10 grid grid-cols-1 gap-5 lg:grid-cols-2">

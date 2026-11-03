@@ -53,8 +53,11 @@ supabase/
 2. No painel do projeto, abra **SQL Editor** e execute, **nesta ordem**, o conteúdo de cada arquivo:
    1. `supabase/schema.sql`
    2. `supabase/policies.sql`
+   3. `supabase/migrations/001_cidade_regiao.sql` (cidade e região dos eventos)
 3. Vá até a tela de **cadastro do próprio app** (depois de configurar o passo 2 abaixo) e crie a sua primeira conta — os eventos de demonstração serão atribuídos a ela.
 4. Volte ao **SQL Editor** e execute `supabase/seed.sql` para popular a plataforma com eventos de exemplo.
+
+> A migração `supabase/migrations/002_exigir_classificacao_novos_eventos.sql` é um reforço opcional: rode-a só depois de publicar o código que envia cidade e região (ver `verificacao/ROTEIRO-VALIDACAO.txt`).
 
 > O bucket de imagens (`event-images`) e as políticas de acesso a ele já são criados automaticamente pelo `policies.sql` — não é preciso configurar nada manualmente na aba Storage.
 

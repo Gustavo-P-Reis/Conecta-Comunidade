@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { eventSchema } from "@/lib/validations";
+import { normalizeRegion } from "@/lib/geography";
 import type { EventFormValues } from "@/lib/types";
 
 export interface ActionResult {
@@ -41,6 +42,8 @@ export async function createEvent(
       category: parsed.data.category,
       event_date: parsed.data.event_date,
       event_time: parsed.data.event_time,
+      city: parsed.data.city,
+      region: normalizeRegion(parsed.data.city, parsed.data.region),
       location: parsed.data.location,
       neighborhood: parsed.data.neighborhood,
       address: parsed.data.address || null,
@@ -99,6 +102,8 @@ export async function updateEvent(
       category: parsed.data.category,
       event_date: parsed.data.event_date,
       event_time: parsed.data.event_time,
+      city: parsed.data.city,
+      region: normalizeRegion(parsed.data.city, parsed.data.region),
       location: parsed.data.location,
       neighborhood: parsed.data.neighborhood,
       address: parsed.data.address || null,

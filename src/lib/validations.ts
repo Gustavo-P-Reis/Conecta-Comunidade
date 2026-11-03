@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CITY_VALUES, REGION_VALUES, cityUsesRegions } from "@/lib/geography";
 
 const categoryValues = [
   "cultura",
@@ -35,6 +36,14 @@ export const eventSchema = z
         return new Date(`${value}T00:00:00`) >= today;
       }, "A data precisa ser hoje ou no futuro."),
     event_time: z.string().min(1, "Escolha um horário."),
+    city: z.enum(CITY_VALUES, {
+      errorMap: () => ({ message: "Selecione a cidade." }),
+    }),
+    region: z
+      .enum(REGION_VALUES, {
+        errorMap: () => ({ message: "Selecione a região." }),
+      })
+      .optional(),
     location: z
       .string()
       .trim()
@@ -64,6 +73,17 @@ export const eventSchema = z
   .refine((data) => data.is_free || (data.price && data.price > 0), {
     message: "Informe o valor do ingresso para eventos pagos.",
     path: ["price"],
+  })
+  // A região é obrigatória quando a cidade usa regiões (hoje, São Paulo). Em
+  // "Outra cidade" ela não se aplica: a Server Action grava region = null.
+  .superRefine((data, ctx) => {
+    if (cityUsesRegions(data.city) && !data.region) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["region"],
+        message: "Selecione a região.",
+      });
+    }
   });
 
 export type EventSchema = z.infer<typeof eventSchema>;

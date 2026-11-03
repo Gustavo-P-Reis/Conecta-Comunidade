@@ -22,6 +22,7 @@ import {
 import { ImageUpload } from "@/components/events/image-upload";
 import { eventSchema, type EventSchema } from "@/lib/validations";
 import { CATEGORIES } from "@/lib/constants";
+import { CITY_OPTIONS, REGION_OPTIONS, cityUsesRegions } from "@/lib/geography";
 import { createEvent, updateEvent } from "@/lib/actions/events";
 import type { EventFormValues } from "@/lib/types";
 
@@ -42,6 +43,8 @@ export function EventForm({
     handleSubmit,
     control,
     watch,
+    setValue,
+    clearErrors,
     formState: { errors },
   } = useForm<EventSchema>({
     resolver: zodResolver(eventSchema),
@@ -51,6 +54,8 @@ export function EventForm({
       category: defaultValues?.category ?? "cultura",
       event_date: defaultValues?.event_date ?? "",
       event_time: defaultValues?.event_time ?? "",
+      city: defaultValues?.city,
+      region: defaultValues?.region,
       location: defaultValues?.location ?? "",
       neighborhood: defaultValues?.neighborhood ?? "",
       address: defaultValues?.address ?? "",
@@ -64,6 +69,8 @@ export function EventForm({
   });
 
   const isFree = watch("is_free");
+  const city = watch("city");
+  const regionEnabled = cityUsesRegions(city);
 
   async function onSubmit(values: EventSchema) {
     setSubmitting(true);
@@ -176,6 +183,81 @@ export function EventForm({
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="city">Cidade</Label>
+              <Controller
+                control={control}
+                name="city"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? ""}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      // Fora de uma cidade com regiões, a região não se aplica: limpa o valor anterior.
+                      if (!cityUsesRegions(value)) {
+                        setValue("region", undefined);
+                        clearErrors("region");
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="city">
+                      <SelectValue placeholder="Selecione a cidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.city && <p className="text-xs text-destructive">{errors.city.message}</p>}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="region">Região</Label>
+              <Controller
+                control={control}
+                name="region"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? ""}
+                    onValueChange={field.onChange}
+                    disabled={!regionEnabled}
+                  >
+                    <SelectTrigger id="region">
+                      <SelectValue
+                        placeholder={
+                          !city
+                            ? "Escolha a cidade primeiro"
+                            : regionEnabled
+                              ? "Selecione a região"
+                              : "Não se aplica"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REGION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.region && (
+                <p className="text-xs text-destructive">{errors.region.message}</p>
+              )}
+              {city && !regionEnabled && (
+                <p className="text-xs text-muted-foreground">
+                  A região não se aplica a esta cidade.
+                </p>
+              )}
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="location">Local</Label>

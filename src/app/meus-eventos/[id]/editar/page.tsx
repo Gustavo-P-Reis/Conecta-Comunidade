@@ -32,6 +32,9 @@ export default async function EditarEventoPage({ params }: PageProps) {
     category: event.category,
     event_date: event.event_date,
     event_time: event.event_time?.slice(0, 5),
+    // eventos antigos chegam sem cidade/região: o formulário exige a classificação ao salvar
+    city: event.city ?? undefined,
+    region: event.region ?? undefined,
     location: event.location,
     neighborhood: event.neighborhood,
     address: event.address ?? "",

@@ -1,4 +1,5 @@
 import type { CategoryValue, ReportReason } from "@/lib/constants";
+import type { CityValue, RegionValue } from "@/lib/geography";
 
 export interface Profile {
   id: string;
@@ -21,6 +22,10 @@ export interface EventRow {
   location: string;
   neighborhood: string;
   address: string | null;
+  /** null = evento antigo, ainda sem classificação ("Não informada") */
+  city: CityValue | null;
+  /** só existe quando a cidade usa regiões (hoje, São Paulo); null caso contrário */
+  region: RegionValue | null;
   is_free: boolean;
   price: number | null;
   image_url: string | null;
@@ -73,6 +78,8 @@ export interface EventFormValues {
   category: CategoryValue;
   event_date: string;
   event_time: string;
+  city: CityValue;
+  region?: RegionValue;
   location: string;
   neighborhood: string;
   address?: string;
