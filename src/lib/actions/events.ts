@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { eventSchema } from "@/lib/validations";
 import { normalizeRegion } from "@/lib/geography";
+import {
+  resolveVideoChange,
+  videoColumnsForInsert,
+  videoColumnsForUpdate,
+} from "@/lib/youtube";
 import type { EventFormValues } from "@/lib/types";
 
 export interface ActionResult {
@@ -33,6 +38,15 @@ export async function createEvent(
     };
   }
 
+  // Vídeo (opcional): o servidor extrai o ID de novo e nunca confia no navegador.
+  const videoChange = resolveVideoChange(parsed.data.video_url);
+  if (videoChange.action === "invalid") {
+    return {
+      success: false,
+      message: "Cole um link válido do YouTube (ex.: https://youtu.be/...).",
+    };
+  }
+
   const { data, error } = await supabase
     .from("events")
     .insert({
@@ -53,6 +67,7 @@ export async function createEvent(
       organizer_name: parsed.data.organizer_name,
       contact: parsed.data.contact || null,
       image_url: parsed.data.image_url || null,
+      ...videoColumnsForInsert(videoChange),
     })
     .select("id")
     .single();
@@ -92,6 +107,15 @@ export async function updateEvent(
     };
   }
 
+  // Vídeo: campo ausente (undefined) = não mexe no vídeo salvo; "" = remove; link válido = atualiza.
+  const videoChange = resolveVideoChange(parsed.data.video_url);
+  if (videoChange.action === "invalid") {
+    return {
+      success: false,
+      message: "Cole um link válido do YouTube (ex.: https://youtu.be/...).",
+    };
+  }
+
   // A cláusula .eq("user_id", user.id) é redundante com a política de RLS,
   // mas evita uma viagem a mais ao banco só para descobrir "não autorizado".
   const { data, error } = await supabase
@@ -113,6 +137,7 @@ export async function updateEvent(
       organizer_name: parsed.data.organizer_name,
       contact: parsed.data.contact || null,
       image_url: parsed.data.image_url || null,
+      ...videoColumnsForUpdate(videoChange),
     })
     .eq("id", eventId)
     .eq("user_id", user.id)

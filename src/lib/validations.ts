@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CITY_VALUES, REGION_VALUES, cityUsesRegions } from "@/lib/geography";
+import { YOUTUBE_URL_MAX_LENGTH, parseYouTubeInput } from "@/lib/youtube";
 
 const categoryValues = [
   "cultura",
@@ -69,6 +70,16 @@ export const eventSchema = z
       .max(120),
     contact: z.string().trim().max(160).optional().or(z.literal("")),
     image_url: z.string().url().optional().or(z.literal("")),
+    // Vídeo de apresentação (opcional): link do YouTube. Vazio = sem vídeo. O servidor
+    // extrai o ID de novo (src/lib/actions/events.ts); aqui só se recusa link inválido.
+    video_url: z
+      .string()
+      .trim()
+      .max(YOUTUBE_URL_MAX_LENGTH, "O link do vídeo é muito longo.")
+      .refine((value) => parseYouTubeInput(value).status !== "invalid", {
+        message: "Cole um link válido do YouTube (ex.: https://youtu.be/...).",
+      })
+      .optional(),
   })
   .refine((data) => data.is_free || (data.price && data.price > 0), {
     message: "Informe o valor do ingresso para eventos pagos.",
