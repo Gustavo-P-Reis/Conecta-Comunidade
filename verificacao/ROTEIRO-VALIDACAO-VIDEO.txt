@@ -1,0 +1,409 @@
+﻿=====================================================================
+ CONECTA COMUNIDADE - ROTEIRO DE VALIDAÇÃO
+ Melhoria: vídeo de apresentação do evento (link do YouTube)
+=====================================================================
+
+CONTEÚDO
+  0. O que foi e o que NÃO foi verificado
+  1. Antes de começar (somente leitura)
+  2. Aplicar com segurança - NESTA ORDEM
+  3. Conferir o banco depois da migração 003
+  4. Testes no app (checklist)
+  5. Conferência cruzada por SQL
+  6. Testes de permissão no banco (avançado, opcional, não grava nada)
+  7. Comandos na sua máquina
+  8. Reverter
+  9. Decisões técnicas e limites
+
+
+=====================================================================
+0. O QUE FOI E O QUE NÃO FOI VERIFICADO
+=====================================================================
+Ambiente onde trabalhei: sem internet, sem PostgreSQL, sem Supabase, sem Vercel e
+sem as bibliotecas do projeto instaladas (React, Next, Zod, react-hook-form...).
+O código analisado é o do zip original com a melhoria regional já aplicada, não
+necessariamente a versão publicada mais recente do seu repositório.
+
+VERIFICADO POR MIM (resultados desta execução)
+ [x] test-youtube.mjs (extração do ID, semântica de edição, SQL, verificações
+     estáticas do código) .................................... 24 de 24 passaram
+ [x] test-actions-youtube.mjs: executa as Server Actions REAIS (createEvent e
+     updateEvent) com um Supabase falso e o Zod substituído, e confere o que é
+     gravado ........................................................ 11 de 11 passaram
+ [x] test-geography.mjs (regressão da classificação regional, arquivo da melhoria
+     anterior) ....................................................... 15 de 15 passaram
+ [x] 34 bugs plantados de propósito (extração, semântica de edição, atributos de
+     segurança do iframe, Server Actions, migração, regra de data, região): ......
+     34 de 34 detectados por pelo menos um teste
+ [x] TypeScript em modo estrito (tsc 6.0.3) em src/lib/youtube.ts e
+     src/lib/geography.ts ..................................................... sem erros
+ [x] Sintaxe TS/TSX dos 8 arquivos alterados ou novos ..................... sem erros
+ [x] Checagem de tipos do projeto com as bibliotecas externas SUBSTITUÍDAS por stubs:
+     80 mensagens antes e 80 depois, 0 novas (o ruído dos stubs já existia no
+     código original). 6 erros de tipo plantados nos arquivos do vídeo foram todos
+     detectados. Isto confere a consistência entre os arquivos do projeto; NÃO
+     substitui o tsc real.
+ [x] O patch (video-youtube.patch) aplica sem conflito (patch -p1 e git apply --check)
+     e reproduz exatamente os arquivos alterados. Ele toca SOMENTE: README.md,
+     types.ts, validations.ts, actions/events.ts, event-form.tsx,
+     meus-eventos/[id]/editar/page.tsx, eventos/[id]/page.tsx (alterados) e
+     youtube.ts, youtube-embed.tsx, 003_video_youtube.sql (novos). Não toca em
+     package.json, next.config.mjs, middleware, autenticação, schema.sql, policies.sql,
+     migrações 001/002, painel admin, gráficos nem na classificação regional.
+ [x] SQL da 003 revisado por script: sem DROP/DELETE/TRUNCATE/UPDATE/INSERT, sem
+     mexer em policies, um único GRANT (UPDATE só na coluna nova), coluna anulável,
+     "if not exists", constraint criada só se não existir, regex igual ao do código.
+
+Correções que fiz nos MEUS testes durante o trabalho (nenhuma exigiu mudar o código
+do produto):
+ - 2 testes estáticos falharam por casarem com COMENTÁRIOS do componente; passaram a
+   analisar só o código.
+ - 1 teste procurava "youtu" no payload inteiro e casava com o nome da coluna
+   youtube_video_id; passou a olhar só os valores.
+ - 1 bug plantado (guarda de rejeição desativada) NÃO foi detectado na primeira
+   rodada; por isso endureci um teste e criei os testes que executam as Server
+   Actions de verdade.
+
+NÃO VERIFICADO (você precisa executar)
+ [ ] O SQL rodando de verdade no Supabase (não havia PostgreSQL aqui)
+ [ ] npm install, tsc real, lint, build de produção e deploy na Vercel
+ [ ] As telas no navegador e no celular
+ [ ] Zod e react-hook-form reais (nos testes das Server Actions o Zod foi
+     substituído por um stub que aceita tudo; a validação do vídeo feita pela
+     própria Server Action roda de verdade)
+ [ ] O player do YouTube de verdade: vídeos privados, com incorporação desativada,
+     com restrição de idade, Shorts, navegadores embutidos de apps, iOS/Android
+ [ ] Que os ícones Clapperboard e ExternalLink existam na versão do lucide-react
+     instalada (nos stubs eram genéricos)
+ [ ] Que o seu repositório e o seu banco reais estejam iguais ao zip analisado
+
+AVISO: os testes estáticos e os testes das Server Actions dependem dos arquivos como
+eu os entreguei. Se o seu repositório tiver versões diferentes deles, esses testes
+podem falhar sem que haja bug; compare os arquivos.
+
+
+=====================================================================
+1. ANTES DE COMEÇAR (SOMENTE LEITURA)
+=====================================================================
+No SQL Editor do Supabase, anote o resultado:
+
+  -- colunas de events (não deve existir youtube_video_id ainda)
+  select column_name, data_type, is_nullable
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'events'
+   order by ordinal_position;
+
+  -- quantos eventos existem, por status
+  select status, count(*) from public.events group by status;
+
+  -- permissões de UPDATE por coluna do papel authenticated
+  select column_name from information_schema.column_privileges
+   where table_schema = 'public' and table_name = 'events'
+     and grantee = 'authenticated' and privilege_type = 'UPDATE'
+   order by column_name;
+
+  -- INSERT é por tabela? (esperado: true)
+  select has_table_privilege('authenticated', 'public.events', 'INSERT');
+
+Opcional: Table Editor > events > exportar em CSV (se a opção existir no seu painel).
+A migração NÃO apaga nem altera dados, mas o CSV dá um ponto de comparação.
+
+
+=====================================================================
+2. APLICAR COM SEGURANÇA - NESTA ORDEM
+=====================================================================
+ 1) Rode  supabase/migrations/003_video_youtube.sql  (SQL Editor > New query >
+    colar tudo > Run). Esperado: "Success. No rows returned". Pode rodar de novo
+    sem problema (re-executável).
+ 2) Faça as consultas da seção 3.
+ 3) Publique o código (git push -> Vercel) e espere o build ficar verde. Se o build
+    falhar, não siga: me envie a mensagem de erro.
+ 4) Faça os testes da seção 4.
+
+POR QUE ESTA ORDEM
+ - A 003 é compatível com o código antigo e com o novo (coluna opcional).
+ - Código novo ANTES da 003: criar e editar eventos SEM mexer no vídeo continua
+   funcionando (o formulário só envia o campo quando ele muda), mas salvar um vídeo
+   falha com a mensagem genérica "Não foi possível...", porque a coluna não existe.
+ - Se alguém colar um vídeo antes da 003, o evento não é salvo; nada é perdido.
+
+
+=====================================================================
+3. CONFERIR O BANCO DEPOIS DA MIGRAÇÃO 003
+=====================================================================
+  select column_name, data_type, is_nullable
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'events'
+     and column_name = 'youtube_video_id';
+  -- esperado: 1 linha: text, is_nullable = YES
+
+  select conname, pg_get_constraintdef(oid)
+    from pg_constraint where conname = 'events_youtube_video_id_check';
+  -- esperado: 1 linha
+
+  select column_name from information_schema.column_privileges
+   where table_schema = 'public' and table_name = 'events'
+     and grantee = 'authenticated' and privilege_type = 'UPDATE'
+     and column_name = 'youtube_video_id';
+  -- esperado: 1 linha
+
+  select has_table_privilege('authenticated', 'public.events', 'INSERT');
+  -- esperado: true (a migração não precisa de grant de INSERT)
+
+  select count(*) as total, count(youtube_video_id) as com_video from public.events;
+  -- esperado: total igual ao da seção 1; com_video = 0
+
+  select policyname, permissive, cmd from pg_policies
+   where schemaname = 'public' and tablename = 'events' order by policyname;
+  -- esperado: as MESMAS policies de antes (a 003 não mexe em policies)
+
+
+=====================================================================
+4. TESTES NO APP (CHECKLIST)
+=====================================================================
+Se você ainda não corrigiu o campo "Capacidade" (notas, seção 14.1, item 2),
+preencha-o ao criar eventos de teste. Para um vídeo de teste, use um seu, em modo
+Público ou Não listado, com a incorporação permitida.
+
+CRIAR
+ [ ] 1. /criar-evento SEM vídeo: publica normalmente; na página do evento NÃO há
+        seção de vídeo nem espaço vazio.
+ [ ] 2. /criar-evento COM link https://www.youtube.com/watch?v=ID: aparece
+        "Vídeo reconhecido." sob o campo; publica; a página do evento mostra o
+        player em 16:9 abaixo da descrição.
+ [ ] 3. Repita a criação com cada formato: youtu.be/ID?si=..., /shorts/ID,
+        /embed/ID, m.youtube.com/watch?v=ID, link com &list=...&t=42s, link sem
+        https:// (youtu.be/ID). Todos devem funcionar.
+VALIDAÇÃO
+ [ ] 4. Colar https://vimeo.com/123 e publicar: erro "Cole um link válido do
+        YouTube (ex.: https://youtu.be/...)." junto ao campo; nada é salvo.
+ [ ] 5. Colar um link do canal (youtube.com/@canal) ou de playlist sem vídeo: mesmo
+        erro.
+ [ ] 6. Colar texto que não é link (ex.: "meu video"): mesmo erro.
+ [ ] 7. Link com mais de 300 caracteres: erro "O link do vídeo é muito longo.".
+EDITAR (semântica aprovada)
+ [ ] 8. Editar um evento COM vídeo: o campo vem preenchido com
+        https://www.youtube.com/watch?v=ID. Alterar só o título e salvar: o vídeo
+        PERMANECE (confira na página do evento e pelo SQL da seção 5).
+ [ ] 9. Trocar por outro link válido e salvar: o vídeo muda para o novo.
+ [ ] 10. Apagar o campo (deixar vazio) e salvar: o vídeo é REMOVIDO (a seção some da
+         página; youtube_video_id fica NULL no banco).
+ [ ] 11. Colocar um link inválido e salvar: bloqueia com a mensagem; o vídeo salvo
+         anteriormente continua intacto.
+ [ ] 12. Editar um evento ANTIGO sem vídeo, sem tocar no campo: salva normalmente e
+         continua sem vídeo. Depois, adicionar um link e salvar: passa a ter vídeo.
+ [ ] 13. Regra existente (não alterei): a data precisa ser hoje ou no futuro, também
+         na edição. Para adicionar vídeo a um evento já realizado é preciso mudar a
+         data.
+EXIBIÇÃO
+ [ ] 14. Player 16:9, borda e cantos arredondados iguais aos dos cartões; título
+         "Vídeo de apresentação" acima; texto "O vídeo não carregou? Assistir no
+         YouTube" abaixo, com o link abrindo em nova aba.
+ [ ] 15. Celular (360 a 430 px de largura): player ocupa a largura, sem rolagem
+         horizontal; botão de tela cheia funciona (iOS Safari e Android Chrome).
+ [ ] 16. Computador: coluna esquerda com descrição e vídeo; coluna direita
+         (informações, interesse, favoritar, compartilhar, denunciar) intacta.
+ [ ] 17. Eventos antigos e eventos sem vídeo: nenhuma mudança visível na página.
+VÍDEOS PROBLEMÁTICOS (o comportamento é do próprio YouTube; só confirme)
+ [ ] 18. Vídeo PRIVADO: o evento salva; dentro do player aparece a mensagem do
+         YouTube; o link "Assistir no YouTube" é a saída.
+ [ ] 19. Vídeo com INCORPORAÇÃO desativada, REMOVIDO ou com RESTRIÇÃO DE IDADE:
+         idem.
+ [ ] 20. Vídeo Não listado com incorporação permitida: toca normalmente.
+ [ ] 21. Abrir o evento pelo navegador interno de um app (Instagram/WhatsApp): se o
+         player falhar, o link "Assistir no YouTube" resolve.
+REDE E PRIVACIDADE (DevTools > Network)
+ [ ] 22. Página de evento SEM vídeo: nenhuma requisição para youtube.com,
+         youtube-nocookie.com ou google.
+ [ ] 23. Página COM vídeo: a requisição ao youtube-nocookie.com só começa quando o
+         player se aproxima da tela (loading="lazy").
+ [ ] 24. O player não mostra "Erro 153 / Erro de configuração do player". Se
+         mostrar, verifique se existe algum cabeçalho ou meta Referrer-Policy:
+         no-referrer no seu projeto (não existe no código entregue).
+SEGURANÇA
+ [ ] 25. Inspecionar o iframe (DevTools > Elements): src começa com
+         https://www.youtube-nocookie.com/embed/ seguido de 11 caracteres;
+         referrerpolicy="strict-origin-when-cross-origin"; loading="lazy";
+         allowfullscreen; sem atributo sandbox.
+ [ ] 26. Tentar colar links de teste maliciosos: javascript:alert(1),
+         https://youtube.com.evil.com/watch?v=dQw4w9WgXcQ,
+         https://evil.com@youtube.com/watch?v=dQw4w9WgXcQ: todos recusados.
+ACESSIBILIDADE
+ [ ] 27. Com o teclado (Tab) dá para chegar ao player e ao link "Assistir no
+         YouTube"; o iframe tem título lido por leitor de tela.
+OUTRAS FUNÇÕES (nada deve ter mudado)
+ [ ] 28. Classificação regional: criar e editar eventos com Cidade e Região
+         continua funcionando; o gráfico "Eventos ativos por região" no /admin
+         continua igual.
+ [ ] 29. Login, Explorar, cartões, interesse, favorito, denúncia, upload de imagem,
+         exclusão e os outros gráficos do painel continuam como antes.
+
+
+=====================================================================
+5. CONFERÊNCIA CRUZADA POR SQL
+=====================================================================
+  -- eventos com vídeo e o ID gravado (só o ID, nunca a URL)
+  select id, title, youtube_video_id
+    from public.events where youtube_video_id is not null order by created_at desc;
+
+  -- deve devolver ZERO linhas (todo ID gravado tem exatamente 11 caracteres)
+  select id, youtube_video_id from public.events
+   where youtube_video_id is not null and length(youtube_video_id) <> 11;
+
+  select count(*) filter (where youtube_video_id is not null) as com_video,
+         count(*) as total
+    from public.events;
+
+Confirme que o ID da consulta é o mesmo da URL do vídeo no YouTube.
+
+
+=====================================================================
+6. TESTES DE PERMISSÃO NO BANCO (AVANÇADO, OPCIONAL)
+=====================================================================
+Cada bloco roda numa única transação DESFEITA de propósito: nada é gravado. O
+resultado aparece na mensagem de erro final ("RESULTADO -> ..."). Antes, pegue ids:
+  select id, name from public.profiles limit 5;          -- <UUID-USUARIO>
+  select id, user_id, title from public.events limit 5;  -- <ID-DO-EVENTO>, <UUID-DO-DONO>
+
+6.1  UPDATE do vídeo pelo DONO do evento (testa o GRANT por coluna)
+     Esperado: PERMITIDO (linhas afetadas: 1). "permission denied" = o grant da 003
+     não foi aplicado.
+
+  do $$
+  declare v_n integer; v_resultado text;
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claim.sub', '<UUID-DO-DONO>', true);
+    perform set_config('request.jwt.claims',
+      '{"sub":"<UUID-DO-DONO>","role":"authenticated"}', true);
+    begin
+      update public.events set youtube_video_id = 'dQw4w9WgXcQ'
+       where id = '<ID-DO-EVENTO>';
+      get diagnostics v_n = row_count;
+      v_resultado := 'PERMITIDO (linhas afetadas: ' || v_n || ')';
+    exception when others then
+      v_resultado := 'RECUSADO: ' || sqlerrm;
+    end;
+    raise exception 'RESULTADO -> UPDATE de youtube_video_id: %', v_resultado;
+  end
+  $$;
+
+6.2  A restrição (CHECK) do ID
+     Esperado: ID curto RECUSADO; ID válido ACEITO; NULL ACEITO.
+
+  do $$
+  declare v_a text; v_b text; v_c text;
+  begin
+    begin
+      update public.events set youtube_video_id = 'curto' where id = '<ID-DO-EVENTO>';
+      v_a := 'ACEITO (INESPERADO)';
+    exception when check_violation then v_a := 'RECUSADO (esperado)'; end;
+    begin
+      update public.events set youtube_video_id = 'dQw4w9WgXcQ' where id = '<ID-DO-EVENTO>';
+      v_b := 'ACEITO (esperado)';
+    exception when check_violation then v_b := 'RECUSADO (INESPERADO)'; end;
+    begin
+      update public.events set youtube_video_id = null where id = '<ID-DO-EVENTO>';
+      v_c := 'ACEITO (esperado)';
+    exception when check_violation then v_c := 'RECUSADO (INESPERADO)'; end;
+    raise exception 'RESULTADO -> ID curto: % | ID válido: % | NULL: %', v_a, v_b, v_c;
+  end
+  $$;
+
+6.3  INSERT de um evento COM vídeo, como usuário logado (testa que o INSERT não
+     precisa de grant extra). Inclui cidade e região para funcionar também se você
+     tiver aplicado a migração 002 da melhoria regional.
+     Esperado: ACEITO.
+
+  do $$
+  declare v_resultado text;
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claim.sub', '<UUID-USUARIO>', true);
+    perform set_config('request.jwt.claims',
+      '{"sub":"<UUID-USUARIO>","role":"authenticated"}', true);
+    begin
+      insert into public.events (user_id, title, description, category,
+        event_date, event_time, location, neighborhood, organizer_name,
+        city, region, youtube_video_id)
+      values ('<UUID-USUARIO>', 'Teste com vídeo', 'Descrição de teste válida',
+        'outros', current_date + 1, '10:00', 'Local', 'Bairro', 'Organizador',
+        'sao_paulo', 'zona_norte', 'dQw4w9WgXcQ');
+      v_resultado := 'ACEITO';
+    exception when others then
+      v_resultado := 'RECUSADO: ' || sqlerrm;
+    end;
+    raise exception 'RESULTADO -> INSERT com vídeo: %', v_resultado;
+  end
+  $$;
+
+
+=====================================================================
+7. COMANDOS NA SUA MÁQUINA
+=====================================================================
+Na raiz do projeto, depois de copiar os arquivos do pacote:
+
+  npm install                 (se ainda não instalou)
+  npx tsc --noEmit            (TypeScript real, com as bibliotecas instaladas)
+  npm run lint                (pode falhar por configuração antiga do ESLint:
+                               problema que já existia antes)
+  npm run build               (build de produção: o mais importante antes do deploy)
+  node --experimental-strip-types verificacao/test-youtube.mjs
+                              (esperado: "# pass 24" e "# fail 0")
+  node --experimental-strip-types verificacao/test-actions-youtube.mjs
+                              (esperado: "# pass 11" e "# fail 0")
+  node --experimental-strip-types verificacao/test-geography.mjs
+                              (se você tiver o arquivo da melhoria regional;
+                               esperado: "# pass 15" e "# fail 0")
+
+Os testes em Node precisam de Node 22.6 ou mais novo e podem imprimir avisos
+("ExperimentalWarning"), o que é normal.
+
+Aplicar o patch em vez de copiar arquivos (se o seu repositório estiver igual à
+base: zip original + melhoria regional):
+  git apply --check video-youtube.patch   e depois   git apply video-youtube.patch
+Se houver conflito, copie os arquivos do pacote e compare com o seu repositório.
+
+Se algum comando falhar, separe: erro que já existia antes x erro causado pela
+mudança, e me envie a mensagem completa.
+
+
+=====================================================================
+8. REVERTER
+=====================================================================
+Não apaga a coluna nem dados:
+  alter table public.events drop constraint if exists events_youtube_video_id_check;
+  revoke update (youtube_video_id) on public.events from authenticated;
+Volte também ao código anterior. A coluna youtube_video_id pode ficar sem uso
+(removê-la apagaria os vídeos já cadastrados; só faça isso se tiver certeza).
+
+
+=====================================================================
+9. DECISÕES TÉCNICAS E LIMITES
+=====================================================================
+ - Guarda só o ID (11 caracteres) em events.youtube_video_id: nenhuma URL arbitrária
+   fica no banco, e só o ID validado entra na URL do player.
+ - Extração por URL() com lista exata de hosts (youtube.com, www/m.youtube.com,
+   youtu.be, youtube-nocookie.com): domínios parecidos, usuário/senha/porta e
+   esquemas como javascript: são recusados. Formatos aceitos: watch?v=, youtu.be/,
+   /embed/, /shorts/, /live/, /v/. Todos os outros parâmetros do link são
+   descartados. Links de music.youtube.com e IDs soltos (sem link) NÃO são aceitos.
+ - A mesma função valida no formulário (Zod), na Server Action (autoritativa), na
+   página do evento (defesa em profundidade) e o CHECK do banco repete o padrão.
+ - Edição: o formulário só envia video_url quando o campo mudou. No servidor,
+   ausente = não mexe; vazio = remove (NULL); link válido = atualiza o ID.
+ - Player: iframe em youtube-nocookie.com, loading="lazy",
+   referrerPolicy="strict-origin-when-cross-origin" (o YouTube exige o Referer; com
+   no-referrer ocorre o erro 153), allow sem autoplay, sem sandbox, sem
+   dangerouslySetInnerHTML. Sem vídeo, o componente não renderiza nada.
+ - Vídeos privados, removidos, sem incorporação ou com restrição de idade não são
+   detectados no servidor (não há API, chave nem oEmbed). O YouTube mostra a própria
+   mensagem dentro do player, e o link "Assistir no YouTube" fica logo abaixo.
+ - Shorts: aceitos; aparecem no player 16:9 com faixas laterais (confirme no teste).
+ - Não há CSP no projeto. Se um dia houver, precisará de
+   frame-src https://www.youtube-nocookie.com.
+ - O iframe contata o YouTube/Google ao carregar; vale mencionar na documentação de
+   privacidade do TCC.
+ - Não foram alterados: dependências, autenticação, RLS existente, políticas,
+   painel admin, gráficos, classificação regional, regra de data de eventos.
+ - revalidatePath("/admin") não é necessário: o vídeo não aparece no painel.

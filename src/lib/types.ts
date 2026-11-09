@@ -29,6 +29,8 @@ export interface EventRow {
   is_free: boolean;
   price: number | null;
   image_url: string | null;
+  /** ID (11 caracteres) do vídeo de apresentação no YouTube; null = sem vídeo */
+  youtube_video_id: string | null;
   capacity: number | null;
   organizer_name: string;
   contact: string | null;
@@ -89,6 +91,8 @@ export interface EventFormValues {
   organizer_name: string;
   contact?: string;
   image_url?: string;
+  /** Link do YouTube colado pelo organizador (o servidor extrai o ID). undefined = não alterado */
+  video_url?: string;
 }
 
 export interface ExploreFilters {

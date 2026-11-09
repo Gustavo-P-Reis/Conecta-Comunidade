@@ -10,6 +10,7 @@ import { FavoriteButton } from "@/components/events/favorite-button";
 import { ShareButton } from "@/components/events/share-button";
 import { ReportDialog } from "@/components/events/report-dialog";
 import { DeleteEventDialog } from "@/components/events/delete-event-dialog";
+import { YouTubeEmbed } from "@/components/events/youtube-embed";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatEventDateLong, formatEventTime, formatPrice } from "@/lib/utils";
@@ -136,6 +137,8 @@ export default async function EventPage({ params }: PageProps) {
           <p className="whitespace-pre-line text-base leading-relaxed text-muted-foreground">
             {event.description}
           </p>
+
+          <YouTubeEmbed videoId={event.youtube_video_id} title={event.title} />
         </div>
 
         <div className="flex flex-col gap-5">

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { EventForm } from "@/components/events/event-form";
 import { PageHeader } from "@/components/shared/page-header";
 import type { EventFormValues } from "@/lib/types";
+import { youTubeWatchUrl } from "@/lib/youtube";
 
 export const metadata = { title: "Editar evento" };
 
@@ -44,6 +45,8 @@ export default async function EditarEventoPage({ params }: PageProps) {
     organizer_name: event.organizer_name,
     contact: event.contact ?? "",
     image_url: event.image_url ?? "",
+    // o banco guarda só o ID: o campo mostra o link normalizado ("" quando não há vídeo)
+    video_url: youTubeWatchUrl(event.youtube_video_id) ?? "",
   };
 
   return (
