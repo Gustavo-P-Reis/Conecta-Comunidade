@@ -9,10 +9,13 @@ import type { EventWithViewerState } from "@/lib/types";
 export function EventCard({
   event,
   variant = "default",
+  showFavoriteButton = true,
   className,
 }: {
   event: EventWithViewerState;
   variant?: "default" | "large";
+  /** false = sem o coração (usado nas listas do perfil, que têm o próprio botão de remover) */
+  showFavoriteButton?: boolean;
   className?: string;
 }) {
   const isLarge = variant === "large";
@@ -51,12 +54,14 @@ export function EventCard({
           <CategoryBadge category={event.category} />
         </div>
 
-        <div className="absolute right-3 top-3">
-          <FavoriteButton
-            eventId={event.id}
-            initialFavorited={!!event.viewer_has_favorite}
-          />
-        </div>
+        {showFavoriteButton && (
+          <div className="absolute right-3 top-3">
+            <FavoriteButton
+              eventId={event.id}
+              initialFavorited={!!event.viewer_has_favorite}
+            />
+          </div>
+        )}
 
         <div className="absolute left-3 bottom-3">
           <span className="rounded-full bg-background/70 backdrop-blur-sm border border-border-strong px-3 py-1 text-xs font-medium text-foreground">
