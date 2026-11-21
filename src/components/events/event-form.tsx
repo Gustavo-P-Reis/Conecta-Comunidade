@@ -4,7 +4,17 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Info, CalendarDays, MapPin, Ticket, User, Image as ImageIcon } from "lucide-react";
+import {
+  Loader2,
+  Info,
+  CalendarDays,
+  MapPin,
+  Ticket,
+  User,
+  Image as ImageIcon,
+  Clapperboard,
+  CheckCircle2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +34,7 @@ import { eventSchema, type EventSchema } from "@/lib/validations";
 import { CATEGORIES } from "@/lib/constants";
 import { CITY_OPTIONS, REGION_OPTIONS, cityUsesRegions } from "@/lib/geography";
 import { createEvent, updateEvent } from "@/lib/actions/events";
+import { parseYouTubeInput, videoUrlForSubmit } from "@/lib/youtube";
 import type { EventFormValues } from "@/lib/types";
 
 export function EventForm({
@@ -65,20 +76,30 @@ export function EventForm({
       organizer_name: defaultValues?.organizer_name ?? "",
       contact: defaultValues?.contact ?? "",
       image_url: defaultValues?.image_url ?? "",
+      video_url: defaultValues?.video_url ?? "",
     },
   });
 
   const isFree = watch("is_free");
   const city = watch("city");
   const regionEnabled = cityUsesRegions(city);
+  const initialVideoUrl = defaultValues?.video_url ?? "";
+  const videoState = parseYouTubeInput(watch("video_url"));
 
   async function onSubmit(values: EventSchema) {
     setSubmitting(true);
 
+    // Vídeo: campo intacto NÃO é enviado (não mexe no vídeo salvo); "" remove; link novo atualiza.
+    const { video_url, ...rest } = values;
+    const videoField = videoUrlForSubmit(video_url, initialVideoUrl);
+    const payload = (
+      videoField === undefined ? rest : { ...rest, video_url: videoField }
+    ) as EventFormValues;
+
     const result =
       mode === "create"
-        ? await createEvent(values as EventFormValues)
-        : await updateEvent(eventId!, values as EventFormValues);
+        ? await createEvent(payload)
+        : await updateEvent(eventId!, payload);
 
     setSubmitting(false);
 
@@ -365,6 +386,51 @@ export function EventForm({
               <ImageUpload value={field.value || undefined} onChange={(url) => field.onChange(url ?? "")} />
             )}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-2 text-primary">
+            <Clapperboard className="size-4" />
+            <CardTitle className="text-base">Vídeo de apresentação</CardTitle>
+            <span className="rounded-full border border-border-strong px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              Opcional
+            </span>
+          </div>
+          <CardDescription>
+            Publique o vídeo no seu canal do YouTube e cole o link aqui. Ele aparece na página do
+            evento.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="video_url">Vídeo de apresentação (link do YouTube)</Label>
+            <Input
+              id="video_url"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="https://www.youtube.com/watch?v=..."
+              aria-describedby="video_url_help"
+              aria-invalid={!!errors.video_url}
+              {...register("video_url")}
+            />
+            {errors.video_url && (
+              <p className="text-xs text-destructive">{errors.video_url.message}</p>
+            )}
+            {!errors.video_url && videoState.status === "valid" && (
+              <p className="flex items-center gap-1.5 text-xs text-primary">
+                <CheckCircle2 className="size-3.5" /> Vídeo reconhecido.
+              </p>
+            )}
+          </div>
+          <p id="video_url_help" className="text-xs leading-relaxed text-muted-foreground">
+            Deixe o vídeo como Público ou Não listado e com a incorporação permitida nas
+            configurações do YouTube; vídeos privados não aparecem. Para remover o vídeo, apague o
+            link e salve.
+          </p>
         </CardContent>
       </Card>
 
